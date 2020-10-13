@@ -56,6 +56,11 @@ func main() {
 		goto ERR
 	}
 
+	// 注册服务
+	if err = worker.InitRegister(); err != nil {
+		goto ERR
+	}
+
 	// 阻塞主goroutine
 	for {
 		time.Sleep(1 * time.Second)
