@@ -42,6 +42,11 @@ func main() {
 		goto ERR
 	}
 
+	// 初始化worker管理器
+	if err = master.InitWorkerMgr(); err != nil {
+		goto ERR
+	}
+
 	// 向web提供api
 	if err = master.InitApiServer(); err != nil {
 		goto ERR

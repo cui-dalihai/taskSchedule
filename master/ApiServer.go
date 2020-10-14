@@ -26,6 +26,7 @@ func InitApiServer() (err error) {
 	mux.HandleFunc("/job/delete", handleJobDelete)
 	mux.HandleFunc("/job/list", handleJobList)
 	mux.HandleFunc("/job/kill", handleJobKill)
+	mux.HandleFunc("/worker/list", handleWorkerList)
 
 	// 安装静态文件路由
 	mux.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir(G_config.WebRoot))))
@@ -172,6 +173,29 @@ func handleJobKill(w http.ResponseWriter, r *http.Request) {
 
 	return
 
+ERR:
+	if bytes, err = common.BuildResp(-1, err.Error(), nil); err == nil {
+		w.Write(bytes)
+	}
+}
+
+func handleWorkerList(w http.ResponseWriter, r *http.Request) {
+
+	var (
+		workerList []string
+		err        error
+		bytes      []byte
+	)
+
+	if workerList, err = G_workerMgr.WorkerList(); err != nil {
+		goto ERR
+	}
+
+	if bytes, err = common.BuildResp(0, "success", workerList); err == nil {
+		w.Write(bytes)
+	}
+
+	return
 ERR:
 	if bytes, err = common.BuildResp(-1, err.Error(), nil); err == nil {
 		w.Write(bytes)

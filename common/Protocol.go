@@ -115,6 +115,10 @@ func UnpackJob(val []byte) (ret *Job, err error) {
 	return
 }
 
+func ExtractWorker(key string) (workerId string) {
+	return strings.TrimPrefix(key, JOB_WORKER_DIR)
+}
+
 func ExtractName(key string) (name string) {
 	return strings.TrimPrefix(key, JOB_SAVE_DIR)
 }
