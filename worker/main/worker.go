@@ -41,6 +41,11 @@ func main() {
 		goto ERR
 	}
 
+	// 初始化mongo链接
+	if err = worker.InitJobLogger(); err != nil {
+		goto ERR
+	}
+
 	// 启动执行器
 	if err = worker.InitExecutor(); err != nil {
 		goto ERR

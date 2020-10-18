@@ -84,9 +84,8 @@ func (scheduler *Scheduler) handleJobEvent(e *common.JobEvent) {
 
 // handleJobResult 处理结果通道中的结果
 func (scheduler *Scheduler) handleJobResult(jobExeRes *common.JobExecuteResult) {
-	fmt.Println("收到执行结果", jobExeRes.JobExecuteInfo.Job.Name)
-	fmt.Println("收到执行结果", jobExeRes.Err)
-	fmt.Println("收到执行结果", string(jobExeRes.Res))
+	fmt.Println("发送执行结果", string(jobExeRes.Res))
+	G_jobLogger.SendLog(*jobExeRes)
 	delete(scheduler.jobExecuting, jobExeRes.JobExecuteInfo.Job.Name)
 }
 
