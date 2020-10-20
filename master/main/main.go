@@ -42,6 +42,11 @@ func main() {
 		goto ERR
 	}
 
+	// 创建etcd的链接
+	if err = master.InitLogMgr(); err != nil {
+		goto ERR
+	}
+
 	// 初始化worker管理器
 	if err = master.InitWorkerMgr(); err != nil {
 		goto ERR

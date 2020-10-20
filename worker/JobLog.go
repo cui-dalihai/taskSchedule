@@ -35,7 +35,6 @@ func (logger *JobLogger) BatchWrite(logs []interface{}) {
 	)
 
 	if insertManyRes, err = logger.Col.InsertMany(context.TODO(), logs); err != nil {
-		fmt.Println("批量写入异常:", err.Error())
 	}
 
 	fmt.Println("批量写入成功:", insertManyRes.InsertedIDs)
@@ -45,8 +44,10 @@ func (logger *JobLogger) BatchWrite(logs []interface{}) {
 func (logger *JobLogger) LogWatcher() {
 
 	var (
-		log   common.JobExecuteResult
-		timer *time.Timer
+		log       common.JobExecuteResult
+		timer     *time.Timer
+		errString string
+		logInfo   bson.D
 	)
 
 	// 传给BatchWrite的&logs实际上是一个logs变量的别名, 两者都指向同一片地址, 但是每次新一轮for循环logs会被指向新的地址
@@ -57,19 +58,31 @@ func (logger *JobLogger) LogWatcher() {
 
 			// 第一条时启动定时器
 			if len(logger.LogsBuf) == 0 {
-				fmt.Println("首条时启动定时器")
 				timer = time.AfterFunc(time.Duration(13)*time.Second,
 					func() {
 						logger.LogsCommitTimeoutChan <- struct{}{}
 					})
 			}
 
-			logger.LogsBuf = append(logger.LogsBuf, bson.D{
+			// shell命令	错误原因	脚本输出	计划开始时间	实际调度时间	开始执行时间	执行结束时间
+			if log.Err != nil {
+				errString = log.Err.Error()
+			} else {
+				errString = ""
+			}
+
+			logInfo = bson.D{
+				{"name", log.JobExecuteInfo.Job.Name},
+				{"command", log.JobExecuteInfo.Job.Command},
+				{"err", errString},
 				{"res", string(log.Res)},
-				{"err", log.Err},
+				{"planTime", log.JobExecuteInfo.PlanTime},
+				{"actualTime", log.JobExecuteInfo.ActualTime},
 				{"startTime", log.StartTime},
 				{"endTime", log.EndTime},
-			})
+			}
+
+			logger.LogsBuf = append(logger.LogsBuf, logInfo)
 
 			if len(logger.LogsBuf) >= 100 {
 

@@ -26,6 +26,7 @@ func InitApiServer() (err error) {
 	mux.HandleFunc("/job/delete", handleJobDelete)
 	mux.HandleFunc("/job/list", handleJobList)
 	mux.HandleFunc("/job/kill", handleJobKill)
+	mux.HandleFunc("/job/log", handleJobLog)
 	mux.HandleFunc("/worker/list", handleWorkerList)
 
 	// 安装静态文件路由
@@ -171,6 +172,50 @@ func handleJobKill(w http.ResponseWriter, r *http.Request) {
 		w.Write(bytes)
 	}
 
+	return
+
+ERR:
+	if bytes, err = common.BuildResp(-1, err.Error(), nil); err == nil {
+		w.Write(bytes)
+	}
+}
+
+func handleJobLog(w http.ResponseWriter, r *http.Request) {
+
+	var (
+		err      error
+		bytes    []byte
+		logs     []interface{}
+		skipstr  string
+		skip     int
+		name     string
+		limitstr string
+		limit    int
+	)
+
+	if err = r.ParseForm(); err != nil {
+		goto ERR
+	}
+
+	name = r.Form.Get("name")
+	skipstr = r.Form.Get("skip")
+	limitstr = r.Form.Get("limit")
+
+	if skip, err = strconv.Atoi(skipstr); err != nil {
+		skip = 0
+	}
+
+	if limit, err = strconv.Atoi(limitstr); err != nil {
+		limit = 20
+	}
+
+	if logs, err = G_logMgr.LogList(name, int64(skip), limit); err != nil {
+		goto ERR
+	}
+
+	if bytes, err = common.BuildResp(0, "success", logs); err == nil {
+		w.Write(bytes)
+	}
 	return
 
 ERR:
