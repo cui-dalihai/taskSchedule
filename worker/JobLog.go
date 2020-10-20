@@ -9,13 +9,15 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	_ "go.mongodb.org/mongo-driver/mongo/readpref"
 	"taskSchedule/prj_src/taskSchedule/common"
+	"time"
 )
 
 type JobLogger struct {
 	Col *mongo.Collection
 
-	LogsBuf  []interface{}
-	RecvChan chan common.JobExecuteResult
+	LogsBuf               []interface{}
+	LogsCommitTimeoutChan chan struct{}
+	RecvChan              chan common.JobExecuteResult
 }
 
 var G_jobLogger *JobLogger
@@ -25,14 +27,14 @@ func (logger *JobLogger) SendLog(jobRes common.JobExecuteResult) {
 	logger.RecvChan <- jobRes
 }
 
-func (logger *JobLogger) BatchWrite(logs *[]interface{}) {
+func (logger *JobLogger) BatchWrite(logs []interface{}) {
 
 	var (
 		err           error
 		insertManyRes *mongo.InsertManyResult
 	)
 
-	if insertManyRes, err = logger.Col.InsertMany(context.TODO(), *logs); err != nil {
+	if insertManyRes, err = logger.Col.InsertMany(context.TODO(), logs); err != nil {
 		fmt.Println("批量写入异常:", err.Error())
 	}
 
@@ -43,31 +45,47 @@ func (logger *JobLogger) BatchWrite(logs *[]interface{}) {
 func (logger *JobLogger) LogWatcher() {
 
 	var (
-		log common.JobExecuteResult
+		log   common.JobExecuteResult
+		timer *time.Timer
 	)
 
-	for log = range logger.RecvChan {
-		fmt.Println("收到执行结果.")
-		var logs []interface{}
-		logger.LogsBuf = append(logger.LogsBuf, bson.D{
-			{"res", string(log.Res)},
-			{"err", log.Err},
-			{"startTime", log.StartTime},
-			{"endTime", log.EndTime},
-		})
+	// 传给BatchWrite的&logs实际上是一个logs变量的别名, 两者都指向同一片地址, 但是每次新一轮for循环logs会被指向新的地址
+	// 所以每个BatchWrite使用的是一个独立的地址, 下一轮for循环重写logs也不会影响到&logs在BatchWrite内部的使用
+	for {
+		select {
+		case log = <-logger.RecvChan:
 
-		fmt.Println("写入logsBuf后:", len(logger.LogsBuf))
-		if len(logger.LogsBuf) == 10 {
-
-			for _, v := range logger.LogsBuf {
-				logs = append(logs, v)
+			// 第一条时启动定时器
+			if len(logger.LogsBuf) == 0 {
+				fmt.Println("首条时启动定时器")
+				timer = time.AfterFunc(time.Duration(13)*time.Second,
+					func() {
+						logger.LogsCommitTimeoutChan <- struct{}{}
+					})
 			}
 
-			logger.LogsBuf = logger.LogsBuf[:0]
-			fmt.Println("满足十条, 写入DB后清空logsBuf", len(logger.LogsBuf))
-			go logger.BatchWrite(&logs)
-		}
+			logger.LogsBuf = append(logger.LogsBuf, bson.D{
+				{"res", string(log.Res)},
+				{"err", log.Err},
+				{"startTime", log.StartTime},
+				{"endTime", log.EndTime},
+			})
 
+			if len(logger.LogsBuf) >= 100 {
+
+				// 提交, 清空, 停止定时器
+
+				go logger.BatchWrite(logger.LogsBuf) // 值传递, goroutine会收到当前LogsBuf的一个拷贝, 所以后面对LogsBuf的修改
+				logger.LogsBuf = logger.LogsBuf[:0]  // 不会影响goroutine
+				timer.Stop()
+			}
+
+		case <-logger.LogsCommitTimeoutChan:
+
+			go logger.BatchWrite(logger.LogsBuf)
+			logger.LogsBuf = logger.LogsBuf[:0]
+			timer.Stop()
+		}
 	}
 }
 
@@ -92,16 +110,13 @@ func InitJobLogger() (err error) {
 		return
 	}
 
-	// if ctx, _ = context.WithTimeout(context.TODO(), time.Duration(G_config.MongodbConnectTimeout) * time.Millisecond); err != nil {
-	// 	return
-	// }
-
 	col = client.Database("JobSchedule").Collection("JobLogs")
 
 	G_jobLogger = &JobLogger{
-		Col:      col,
-		LogsBuf:  []interface{}{},
-		RecvChan: make(chan common.JobExecuteResult),
+		Col:                   col,
+		LogsBuf:               []interface{}{},
+		RecvChan:              make(chan common.JobExecuteResult),
+		LogsCommitTimeoutChan: make(chan struct{}),
 	}
 
 	go G_jobLogger.LogWatcher()

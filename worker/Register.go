@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"github.com/coreos/etcd/clientv3"
 	guuid "github.com/google/uuid"
 	"net"
@@ -120,8 +119,7 @@ func workerIp() (ipstr string, err error) {
 		return
 	}
 
-	for k, v := range addr {
-		fmt.Println(k, v)
+	for _, v := range addr {
 		ip, isIpNet := v.(*net.IPNet)
 		if isIpNet && !ip.IP.IsLoopback() {
 			if ip.IP.To4() != nil {
